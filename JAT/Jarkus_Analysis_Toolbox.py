@@ -365,7 +365,7 @@ class Extraction:
                 
         return self.variables_req
                 
-    def get_all_dimensions(self):
+    def get_all_dimensions(self, save=False):
         """Extracts all requested characteristic parameters for all requested 
         years and transects.
         
@@ -387,10 +387,12 @@ class Extraction:
         if os.path.isdir(self.config['outputdir'] + self.config['save locations']['DirC']) == False:
             os.mkdir(self.config['outputdir'] + self.config['save locations']['DirC'])
         
+        params = [] # list of dataframes with each dimension
+        
         # Go through all requested transects            
         for i, trsct_idx in enumerate(self.data.transects_filtered_idxs):
             trsct = str(self.data.transects_filtered[i])
-            print("Extracting parameters of transect " + trsct)
+            #print("Extracting parameters of transect " + trsct)
             
             pickle_file = self.config['save locations']['DirC'] + 'Transect_' + trsct + '_dataframe.pickle'
             
@@ -505,9 +507,12 @@ class Extraction:
                 self.get_active_profile_volume(trsct_idx)  
                 
             # Save dimensions data frame for each transect
-            self.dimensions.to_pickle(self.config['outputdir'] + pickle_file)
+            if save == True:
+                self.dimensions.to_pickle(self.config['outputdir'] + pickle_file)
+            params.append(self.dimensions)
+        return params
             
-    def get_dataframe_per_dimension(self):
+    def get_dataframe_per_dimension(self, params=None, save=False):
         """Creates and saves a dataframe per characteristic parameter from the 
         dataframes with all requested characteristic parameters per transect.
 
@@ -516,18 +521,20 @@ class Extraction:
         variable_dataframe.set_index('years', inplace=True)   
         
         variables = self.variables_req
+        all_variables = dict() # dictionary with all variable_dataframes
         # Go through all requested variables                
         for variable in variables:
-            for i, trsct_idx in enumerate(self.data.transects_filtered_idxs):
-                # Go through all transects 
+            # Go through all transects 
+            for i, trsct_idx in enumerate(self.data.transects_filtered_idxs):                
                 trsct = str(self.data.transects_filtered[i])
-                pickle_file = self.config['outputdir'] + self.config['save locations']['DirC'] + 'Transect_' + trsct + '_dataframe.pickle'
                 variable_dataframe.loc[:, trsct] = np.nan
-                
-                # Check whether each corresponding dataframe with characteristic parameters exists, and if so, load it
-                if os.path.exists(pickle_file):
-                    dimensions = pickle.load(open(pickle_file, 'rb')) #load pickle of transect
-                    
+                if params == None:
+                    pickle_file = self.config['outputdir'] + self.config['save locations']['DirC'] + 'Transect_' + trsct + '_dataframe.pickle'
+                    # Check whether each corresponding dataframe with characteristic parameters exists, and if so, load it
+                    if os.path.exists(pickle_file):
+                        dimensions = pickle.load(open(pickle_file, 'rb')) #load pickle of transect
+                else:
+                    dimensions = params[i]
                 # If a requested variable is not available in the dataframe it is set to nan in the new dataframe
                 if variable not in dimensions.columns:
                     variable_dataframe.loc[:, trsct] = np.nan
@@ -535,16 +542,20 @@ class Extraction:
                     # Go through each year and set the value in the new dataframe.
                     for yr, row in dimensions.iterrows(): 
                         variable_dataframe.loc[yr, trsct] = dimensions.loc[yr, variable] #extract column that corresponds to the requested variable
-                print('Extracted transect ' + str(trsct) + ' for variable ' + variable)
+                #print('Extracted transect ' + str(trsct) + ' for variable ' + variable)
             
             # Check whether saving directory exists, create it if necessary and save dataframe with all years and transect locations for one characteristic parameter.                    
             if os.path.isdir(self.config['outputdir'] + self.config['save locations']['DirD']) == False:
                 os.mkdir(self.config['outputdir'] + self.config['save locations']['DirD'])
-            variable_dataframe.to_pickle(self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_dataframe' + '.pickle')
-            print('The dataframe of ' + variable + ' was saved')
+            if save == True:
+                variable_dataframe.to_pickle(self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_dataframe' + '.pickle')
+                print('The dataframe of ' + variable + ' was saved')     
+            #pdb.set_trace()
+            all_variables[variable] = variable_dataframe.copy()
+        return all_variables
 
     
-    def normalize_dimensions(self):  
+    def normalize_dimensions(self, dimensions_dict=None, save=False):  
         """Normalize the cross-shore location values of all requested 
         characteristic parameters
         
@@ -562,10 +573,14 @@ class Extraction:
         # Get all variables that have to be normalized based on the requirement that _x should be in the column name, 
         # and that change values do not have to be normalized.
         variables = self.variables_req
-        normalized_variables = [var for var in variables if '_x' in var and 'change' not in var]            
-        for i, variable in enumerate(normalized_variables):      
-            pickle_file = self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_dataframe' + '.pickle'
-            dimensions = pickle.load(open(pickle_file, 'rb')) #load pickle of dimensions   
+        normalized_variables = [var for var in variables if '_x' in var and 'change' not in var]
+        all_dfs_normalized = dict()
+        for i, variable in enumerate(normalized_variables):
+            if dimensions_dict == None:
+                pickle_file = self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_dataframe' + '.pickle'
+                dimensions = pickle.load(open(pickle_file, 'rb')) #load pickle of dimensions
+            else:
+                dimensions = dimensions_dict[variable]
             normalized = dimensions.copy()
             # Retrieve normalization type that should be applied from the configuration file
             norm_type = self.config['user defined']['normalization']['type']
@@ -579,8 +594,11 @@ class Extraction:
                     # Get norm value for the cross-shore location in the norm year and subtract that from the values of the variable for each transect
                     normalized.loc[:, i] = col - col[norm_year]
             
-            normalized.to_pickle(self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_normalized_dataframe' + '.pickle')
-            print('The dataframe of ' + variable + ' was normalized and saved')
+            if save == True:
+                normalized.to_pickle(self.config['outputdir'] + self.config['save locations']['DirD'] + variable + '_normalized_dataframe' + '.pickle')
+                #print('The dataframe of ' + variable + ' was normalized and saved')
+            all_dfs_normalized[variable] = normalized
+        return all_dfs_normalized
 
     def get_primary_dune_top(self, trsct_idx): 
         """Extract the primary dune top height (DuneTop_prim_y) and 
@@ -1016,7 +1034,7 @@ class Extraction:
             # Get most seaward stable point that is landward of dunes and with a variance below the threshold
             stable_point = np.intersect1d(stable_points, dunes)[-1]
         except:
-            print("No stable point found")
+            #print("No stable point found")
             stable_point = np.nan
         
         # add info on landward boundary to dataframe
@@ -1235,7 +1253,7 @@ class Extraction:
             # Get most seaward stable point that is seaward of the minimal depth of -5.0 m NAP, has an average stddev below threshold 200m seaward and is itself below the threshold
             stable_point = stable_points[0]
         except:
-            print("No stable point found")
+            #print("No stable point found")
             stable_point = np.nan
         
         # add info on landward boundary to dataframe
