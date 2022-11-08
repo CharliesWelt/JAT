@@ -14,6 +14,8 @@ import os
 from netCDF4 import Dataset, num2date
 from JAT.Geometric_functions import find_intersections, get_gradient, get_volume
 
+import pdb
+
 #################################
 ####     DATA-EXTRACTION     ####
 #################################
@@ -40,6 +42,7 @@ class Transects:
             Configuration that includes the location of the jarkus dataset
         """
         # create a dataset object, based on JARKUS dataset saved locally or on server
+        #pdb.set_trace()
         if 'http' in config['data locations']['Jarkus']:        # check whether it's a url
             try:
                 self.dataset = Dataset(config['data locations']['Jarkus'])
@@ -47,10 +50,12 @@ class Transects:
                 print("Unable to open netcdf file containing jarkus dataset - check url under data locations - Jarkus in jarkus.yml file")
         else: # load from local file
             try:
-                self.dataset = Dataset(config['inputdir'] + config['data locations']['Jarkus'])
+                #self.dataset = Dataset(config['inputdir'] + config['data locations']['Jarkus']) # when the data location is given with the full path (and does not lie in 'input') this is not working
+                self.dataset = Dataset(config['data locations']['Jarkus']) 
             except IOError as e:
                 print("Unable to open netcdf file containing jarkus dataset - check directory under data locations - Jarkus in jarkus.yml file")
         self.variables = self.dataset.variables
+        
         
     def get_years_filtered(self, start_yr, end_yr):
         """Filtering requested years
@@ -1301,7 +1306,8 @@ class Extraction:
                 print("Unable to open netcdf file containing dunetoes dataset - check url under data locations - Dunetoe in jarkus.yml file")
         else: # load from local file
             try:
-                dunetoes = Dataset(self.config['inputdir'] + self.config['data locations']['Dunetoe'])
+                #dunetoes = Dataset(self.config['inputdir'] + self.config['data locations']['Dunetoe'])
+                dunetoes = Dataset(self.config['data locations']['Dunetoe']) # when dunefoot data does not lie in input folder, but full location specified
             except IOError as e:
                 print("Unable to open netcdf file containing dunetoes dataset - check directory under data locations - Dunetoe in jarkus.yml file")
             
